@@ -2,6 +2,8 @@
 
 Chrome extension that adds small visual hints to GitHub pull request list pages.
 
+![GitHub pull request list with author avatars](docs/pull-request-list.png)
+
 ## Install locally
 
 ```sh
