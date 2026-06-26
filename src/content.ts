@@ -1,8 +1,8 @@
 const ICON_CLASS = "github-goggles-author-icon";
 const ROW_SELECTOR = 'div[id^="issue_"], div.js-issue-row, [data-testid="issue-row"]';
-const appAvatarCache = new Map();
+const appAvatarCache = new Map<string, Promise<string | null>>();
 
-function toUrl(value) {
+function toUrl(value: string | null): URL | null {
   try {
     return new URL(value || "", location.origin);
   } catch {
@@ -10,11 +10,11 @@ function toUrl(value) {
   }
 }
 
-function hasBotLabel(authorLink) {
+function hasBotLabel(authorLink: HTMLAnchorElement): boolean {
   let sibling = authorLink.nextElementSibling;
 
   while (sibling) {
-    if (sibling.classList.contains("Label") && sibling.textContent.trim() === "Bot") {
+    if (sibling.classList.contains("Label") && sibling.textContent?.trim() === "Bot") {
       return true;
     }
 
@@ -28,7 +28,7 @@ function hasBotLabel(authorLink) {
   return false;
 }
 
-function getAppSlugFromSearch(authorLink) {
+function getAppSlugFromSearch(authorLink: HTMLAnchorElement): string | null {
   if (!hasBotLabel(authorLink)) {
     return null;
   }
@@ -37,7 +37,7 @@ function getAppSlugFromSearch(authorLink) {
   return query.match(/(?:^|\s)author:app\/([^\s]+)/)?.[1] || null;
 }
 
-function getAppSlug(authorLink) {
+function getAppSlug(authorLink: HTMLAnchorElement): string | null {
   const searchSlug = getAppSlugFromSearch(authorLink);
 
   if (searchSlug) {
@@ -54,24 +54,27 @@ function getAppSlug(authorLink) {
   return toUrl(authorLink.getAttribute("href"))?.pathname.match(/^\/apps\/([^/]+)$/)?.[1] || null;
 }
 
-function getUserAvatarUrl(authorLink) {
+function getUserAvatarUrl(authorLink: HTMLAnchorElement): string {
   const hovercardPath = toUrl(authorLink.getAttribute("data-hovercard-url"))?.pathname || "";
   const hovercardUser = hovercardPath.match(/^\/users\/([^/]+)\/hovercard$/)?.[1];
-  const authorName = authorLink.textContent.trim();
+  const authorName = authorLink.textContent?.trim() || "";
 
   return `https://github.com/${hovercardUser || authorName}.png?size=32`;
 }
 
-function resolveAppAvatar(appSlug) {
+function resolveAppAvatar(appSlug: string): Promise<string | null> {
   if (!appAvatarCache.has(appSlug)) {
     const avatar = fetch(`/apps/${encodeURIComponent(appSlug)}`)
       .then((response) => (response.ok ? response.text() : ""))
       .then((html) => {
         const doc = new DOMParser().parseFromString(html, "text/html");
-        const source =
-          doc.querySelector('img[src*="avatars.githubusercontent.com/in/"]')?.src ||
-          doc.querySelector('meta[property="og:image"][content*="avatars.githubusercontent.com/in/"]')
-            ?.content;
+        const imageSource = doc.querySelector<HTMLImageElement>(
+          'img[src*="avatars.githubusercontent.com/in/"]'
+        )?.src;
+        const metaSource = doc.querySelector<HTMLMetaElement>(
+          'meta[property="og:image"][content*="avatars.githubusercontent.com/in/"]'
+        )?.content;
+        const source = imageSource || metaSource;
 
         return source ? new URL(source, location.origin).toString() : null;
       })
@@ -80,10 +83,10 @@ function resolveAppAvatar(appSlug) {
     appAvatarCache.set(appSlug, avatar);
   }
 
-  return appAvatarCache.get(appSlug);
+  return appAvatarCache.get(appSlug)!;
 }
 
-function createAuthorIcon(authorName) {
+function createAuthorIcon(authorName: string): HTMLImageElement {
   const icon = document.createElement("img");
   icon.className = ICON_CLASS;
   icon.alt = "";
@@ -94,7 +97,7 @@ function createAuthorIcon(authorName) {
   return icon;
 }
 
-function getOrCreateIcon(authorLink) {
+function getOrCreateIcon(authorLink: HTMLAnchorElement): HTMLImageElement {
   const previous = authorLink.previousElementSibling;
 
   if (previous?.classList.contains(ICON_CLASS)) {
@@ -105,12 +108,12 @@ function getOrCreateIcon(authorLink) {
     previous.remove();
   }
 
-  const icon = createAuthorIcon(authorLink.textContent.trim());
+  const icon = createAuthorIcon(authorLink.textContent?.trim() || "");
   authorLink.before(icon);
   return icon;
 }
 
-function setIconSource(icon, key, source) {
+function setIconSource(icon: HTMLImageElement, key: string, source: string | null): void {
   if (icon.dataset.githubGogglesSource === key) {
     return;
   }
@@ -125,7 +128,7 @@ function setIconSource(icon, key, source) {
   }
 }
 
-async function updateAppIcon(icon, appSlug) {
+async function updateAppIcon(icon: HTMLImageElement, appSlug: string): Promise<void> {
   const key = `app:${appSlug}`;
 
   setIconSource(icon, key, null);
@@ -137,23 +140,29 @@ async function updateAppIcon(icon, appSlug) {
   }
 }
 
-function decorateAuthor(authorLink) {
+function decorateAuthor(authorLink: HTMLAnchorElement): void {
   const icon = getOrCreateIcon(authorLink);
   const appSlug = getAppSlug(authorLink);
 
   if (appSlug) {
-    updateAppIcon(icon, appSlug);
+    void updateAppIcon(icon, appSlug);
     return;
   }
 
-  setIconSource(icon, `user:${authorLink.textContent.trim()}`, getUserAvatarUrl(authorLink));
+  setIconSource(icon, `user:${authorLink.textContent?.trim() || ""}`, getUserAvatarUrl(authorLink));
 }
 
-function decoratePullRequestAuthors() {
+function findAuthorLink(row: Element): HTMLAnchorElement | null {
+  return (
+    [...row.querySelectorAll<HTMLAnchorElement>(".opened-by a[href]")].find(
+      (link) => !link.textContent?.trim().startsWith("#")
+    ) || null
+  );
+}
+
+function decoratePullRequestAuthors(): void {
   document.querySelectorAll(ROW_SELECTOR).forEach((row) => {
-    const authorLink = [...row.querySelectorAll(".opened-by a[href]")].find(
-      (link) => !link.textContent.trim().startsWith("#")
-    );
+    const authorLink = findAuthorLink(row);
 
     if (authorLink) {
       decorateAuthor(authorLink);
@@ -163,7 +172,7 @@ function decoratePullRequestAuthors() {
 
 let pending = false;
 
-function scheduleDecorate() {
+function scheduleDecorate(): void {
   if (pending) {
     return;
   }

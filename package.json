@@ -1,0 +1,14 @@
+{
+  "name": "github-goggles",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "packageManager": "pnpm@11.7.0",
+  "scripts": {
+    "build": "tsc --project tsconfig.json",
+    "check": "tsc --noEmit --project tsconfig.json"
+  },
+  "devDependencies": {
+    "typescript": "^5.9.0"
+  }
+}
