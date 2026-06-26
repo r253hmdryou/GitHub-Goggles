@@ -1,0 +1,14 @@
+{
+  "manifest_version": 3,
+  "name": "GitHub Goggles",
+  "description": "Adds visual hints to GitHub pull request lists.",
+  "version": "0.1.0",
+  "content_scripts": [
+    {
+      "matches": ["https://github.com/*/*/pulls*"],
+      "js": ["src/content.js"],
+      "css": ["src/content.css"],
+      "run_at": "document_idle"
+    }
+  ]
+}
