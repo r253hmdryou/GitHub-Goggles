@@ -2,6 +2,10 @@ const ICON_CLASS = "github-goggles-author-icon";
 const ROW_SELECTOR = 'div[id^="issue_"], div.js-issue-row, [data-testid="issue-row"]';
 const appAvatarCache = new Map<string, Promise<string | null>>();
 
+function isPullRequestsPage(): boolean {
+  return /^\/[^/]+\/[^/]+\/pulls(?:\/|$)/.test(location.pathname);
+}
+
 function toUrl(value: string | null): URL | null {
   try {
     return new URL(value || "", location.origin);
@@ -161,6 +165,10 @@ function findAuthorLink(row: Element): HTMLAnchorElement | null {
 }
 
 function decoratePullRequestAuthors(): void {
+  if (!isPullRequestsPage()) {
+    return;
+  }
+
   document.querySelectorAll(ROW_SELECTOR).forEach((row) => {
     const authorLink = findAuthorLink(row);
 
