@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "GitHub Goggles",
-  "description": "Adds visual hints to GitHub pull request lists.",
+  "description": "Adds visual hints and inline videos to GitHub pull request pages.",
   "version": "0.1.0",
   "content_scripts": [
     {
@@ -9,6 +9,12 @@
       "js": ["dist/content.js"],
       "css": ["src/content.css"],
       "run_at": "document_idle"
+    }
+  ],
+  "web_accessible_resources": [
+    {
+      "resources": ["player.html"],
+      "matches": ["https://github.com/*"]
     }
   ]
 }

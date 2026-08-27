@@ -1,0 +1,50 @@
+:root {
+  color-scheme: light dark;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+}
+
+html,
+body {
+  width: 100%;
+  height: 100%;
+  margin: 0;
+  overflow: hidden;
+  background: #000;
+}
+
+video {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+}
+
+.error {
+  display: none;
+  box-sizing: border-box;
+  width: 100%;
+  height: 100%;
+  align-items: center;
+  justify-content: center;
+  flex-direction: column;
+  gap: 8px;
+  padding: 16px;
+  color: #f0f6fc;
+  text-align: center;
+}
+
+.error p {
+  margin: 0;
+}
+
+.error a {
+  color: #58a6ff;
+}
+
+body.is-error video {
+  display: none;
+}
+
+body.is-error .error {
+  display: flex;
+}

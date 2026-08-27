@@ -6,3 +6,63 @@
   object-fit: cover;
   vertical-align: -2px;
 }
+
+.github-goggles-expanded-video {
+  display: block;
+  width: 100%;
+  max-width: 100%;
+  aspect-ratio: 16 / 9;
+  max-height: min(70vh, 720px);
+  margin: 8px 0 16px;
+  border: 1px solid var(--borderColor-default, var(--color-border-default, #d0d7de));
+  border-radius: 6px;
+  background: #000;
+}
+
+.github-goggles-review-comments {
+  font-size: 12px;
+}
+
+.github-goggles-review-comment-list {
+  display: grid;
+  gap: 8px;
+  margin: 8px 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+.github-goggles-review-comment-link {
+  display: block;
+  color: var(--fgColor-default, var(--color-fg-default, #1f2328));
+  text-decoration: none;
+}
+
+.github-goggles-review-comment-link:hover .github-goggles-review-comment-body {
+  color: var(--fgColor-accent, var(--color-accent-fg, #0969da));
+  text-decoration: underline;
+}
+
+.github-goggles-review-comment-meta,
+.github-goggles-review-comment-body {
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.github-goggles-review-comment-meta {
+  color: var(--fgColor-muted, var(--color-fg-muted, #656d76));
+  white-space: nowrap;
+}
+
+.github-goggles-review-comment-body {
+  display: -webkit-box;
+  margin-top: 2px;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  line-clamp: 2;
+}
+
+.github-goggles-review-comments-empty {
+  margin: 8px 0 0;
+  color: var(--fgColor-muted, var(--color-fg-muted, #656d76));
+}
