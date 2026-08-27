@@ -1,9 +1,22 @@
 "use strict";
 const ICON_CLASS = "github-goggles-author-icon";
 const ROW_SELECTOR = 'div[id^="issue_"], div.js-issue-row, [data-testid="issue-row"]';
+const EXPANDED_VIDEO_CLASS = "github-goggles-expanded-video";
+const VIDEO_LINK_SELECTOR = '.markdown-body a[href]:not([data-github-goggles-video])';
+const REVIEW_COMMENTS_SECTION_ID = "github-goggles-unresolved-review-comments";
+const REVIEW_THREAD_SELECTOR = [
+    ".js-resolvable-timeline-thread-container",
+    ".js-resolvable-thread",
+    ".js-inline-comments-container",
+    "[data-resolvable-thread-id]",
+    "[data-review-thread-id]"
+].join(",");
 const appAvatarCache = new Map();
 function isPullRequestsPage() {
     return /^\/[^/]+\/[^/]+\/pulls(?:\/|$)/.test(location.pathname);
+}
+function isPullRequestDetailPage() {
+    return /^\/[^/]+\/[^/]+\/pull\/\d+(?:\/|$)/.test(location.pathname);
 }
 function toUrl(value) {
     try {
@@ -134,19 +147,248 @@ function decoratePullRequestAuthors() {
         }
     });
 }
+function isVideoUrl(value) {
+    const url = toUrl(value);
+    return Boolean(url && /\.(?:mp4|m4v|webm|ogv|ogg)$/i.test(url.pathname));
+}
+function expandVideoLinks() {
+    if (!isPullRequestDetailPage()) {
+        return;
+    }
+    document.querySelectorAll(VIDEO_LINK_SELECTOR).forEach((link) => {
+        const href = link.href;
+        if (!isVideoUrl(href) || link.closest(`.${EXPANDED_VIDEO_CLASS}`)) {
+            return;
+        }
+        link.dataset.githubGogglesVideo = "expanded";
+        const label = normalizeText(link.textContent) || "添付動画";
+        const playerUrl = new URL("player.html", chrome.runtime.getURL("/"));
+        playerUrl.searchParams.set("src", href);
+        playerUrl.searchParams.set("label", label);
+        const player = document.createElement("iframe");
+        player.className = EXPANDED_VIDEO_CLASS;
+        player.src = playerUrl.toString();
+        player.title = label;
+        player.loading = "lazy";
+        player.allowFullscreen = true;
+        const paragraph = link.closest("p");
+        const listItem = link.closest("li");
+        if (paragraph) {
+            paragraph.after(player);
+        }
+        else if (listItem) {
+            listItem.append(player);
+        }
+        else {
+            link.after(player);
+        }
+    });
+}
+function normalizeText(value) {
+    return (value || "").replace(/\s+/g, " ").trim();
+}
+function getControlText(control) {
+    return normalizeText([
+        control.textContent,
+        control.getAttribute("aria-label"),
+        control.getAttribute("title"),
+        control.getAttribute("value")
+    ].join(" "));
+}
+function isResolveControl(control) {
+    const text = getControlText(control);
+    return /\bResolve (?:conversation|thread)\b/i.test(text);
+}
+function isUnresolvedReviewThread(thread) {
+    return [...thread.querySelectorAll("button, input[type='submit'], summary, a")].some(isResolveControl);
+}
+function getElementId(element) {
+    if (element.id) {
+        return element.id;
+    }
+    if (element instanceof HTMLElement) {
+        return (element.dataset.resolvableThreadId ||
+            element.dataset.reviewThreadId ||
+            element.dataset.threadId ||
+            null);
+    }
+    return null;
+}
+function getThreadAnchor(thread) {
+    return (thread.querySelector('a[href*="#discussion_r"]') ||
+        thread.querySelector('a[href*="#pullrequestreview-"]') ||
+        thread.querySelector('a[href^="#"]'));
+}
+function getThreadHref(thread) {
+    const anchor = getThreadAnchor(thread);
+    if (anchor?.href) {
+        return anchor.href;
+    }
+    const id = getElementId(thread);
+    return id ? `${location.pathname}${location.search}#${encodeURIComponent(id)}` : location.href;
+}
+function getThreadAuthor(thread) {
+    const author = thread.querySelector(".author") ||
+        thread.querySelector('a[data-hovercard-type="user"]') ||
+        thread.querySelector('a[href^="/"][data-hovercard-url*="/users/"]');
+    return normalizeText(author?.textContent) || "unknown";
+}
+function getThreadBody(thread) {
+    const body = thread.querySelector(".js-comment-body") ||
+        thread.querySelector(".comment-body") ||
+        thread.querySelector(".markdown-body");
+    return normalizeText(body?.textContent) || "コメント本文を取得できませんでした";
+}
+function getThreadLocation(thread) {
+    const containerWithPath = thread.closest("[data-path]");
+    const pathFromData = containerWithPath?.dataset.path;
+    if (pathFromData) {
+        return pathFromData;
+    }
+    const fileLink = thread.closest(".file")?.querySelector(".file-info a[title], .file-header a[title]") ||
+        thread.querySelector('a[href*="/files#diff-"]') ||
+        thread.querySelector(".file-info a, .file-header a");
+    return normalizeText(fileLink?.getAttribute("title") || fileLink?.textContent) || "ファイル不明";
+}
+function getReviewCommentId(thread, href) {
+    return (getElementId(thread) ||
+        toUrl(href)?.hash.replace(/^#/, "") ||
+        `${getThreadAuthor(thread)}:${getThreadLocation(thread)}:${getThreadBody(thread).slice(0, 80)}`);
+}
+function collectUnresolvedReviewComments() {
+    if (!isPullRequestDetailPage()) {
+        return [];
+    }
+    const comments = new Map();
+    document.querySelectorAll(REVIEW_THREAD_SELECTOR).forEach((thread) => {
+        if (!isUnresolvedReviewThread(thread)) {
+            return;
+        }
+        const href = getThreadHref(thread);
+        const id = getReviewCommentId(thread, href);
+        if (comments.has(id)) {
+            return;
+        }
+        comments.set(id, {
+            id,
+            href,
+            author: getThreadAuthor(thread),
+            body: getThreadBody(thread),
+            location: getThreadLocation(thread)
+        });
+    });
+    return [...comments.values()];
+}
+function findPullRequestSidebar() {
+    return (document.querySelector("#partial-discussion-sidebar") ||
+        document.querySelector('[data-testid="issue-sidebar"]') ||
+        document.querySelector('aside[aria-label="Pull request sidebar"]') ||
+        document.querySelector(".discussion-sidebar") ||
+        document.querySelector(".Layout-sidebar"));
+}
+function findParticipantsSidebarItem(sidebar) {
+    const headings = [
+        ...sidebar.querySelectorAll("h2, h3, h4, strong, .discussion-sidebar-heading")
+    ];
+    const heading = headings.find((candidate) => normalizeText(candidate.textContent).toLowerCase() === "participants");
+    if (!heading) {
+        return null;
+    }
+    const section = heading.closest(".discussion-sidebar-item, .BorderGrid-row, .clearfix, section");
+    if (section && section !== sidebar) {
+        return section;
+    }
+    let child = heading;
+    while (child.parentElement && child.parentElement !== sidebar) {
+        child = child.parentElement;
+    }
+    return child.parentElement === sidebar ? child : null;
+}
+function getOrCreateReviewCommentsSection(sidebar) {
+    const existing = document.getElementById(REVIEW_COMMENTS_SECTION_ID);
+    if (existing) {
+        return existing;
+    }
+    const section = document.createElement("div");
+    section.id = REVIEW_COMMENTS_SECTION_ID;
+    section.className = "discussion-sidebar-item github-goggles-review-comments";
+    const participants = findParticipantsSidebarItem(sidebar);
+    if (participants?.parentElement) {
+        participants.after(section);
+    }
+    else {
+        sidebar.append(section);
+    }
+    return section;
+}
+function createReviewCommentListItem(comment) {
+    const item = document.createElement("li");
+    item.className = "github-goggles-review-comment-item";
+    const link = document.createElement("a");
+    link.className = "github-goggles-review-comment-link";
+    link.href = comment.href;
+    const meta = document.createElement("span");
+    meta.className = "github-goggles-review-comment-meta";
+    meta.textContent = `${comment.author} - ${comment.location}`;
+    const body = document.createElement("span");
+    body.className = "github-goggles-review-comment-body";
+    body.textContent = comment.body;
+    link.append(meta, body);
+    item.append(link);
+    return item;
+}
+function renderReviewCommentsSection(section, comments) {
+    const signature = JSON.stringify(comments.map((comment) => comment.id));
+    if (section.dataset.githubGogglesSignature === signature) {
+        return;
+    }
+    section.dataset.githubGogglesSignature = signature;
+    section.replaceChildren();
+    const heading = document.createElement("h3");
+    heading.className = "discussion-sidebar-heading text-bold";
+    heading.textContent = `未解決レビューコメント (${comments.length})`;
+    section.append(heading);
+    if (comments.length === 0) {
+        const empty = document.createElement("p");
+        empty.className = "github-goggles-review-comments-empty";
+        empty.textContent = "未解決のレビューコメントはありません";
+        section.append(empty);
+        return;
+    }
+    const list = document.createElement("ol");
+    list.className = "github-goggles-review-comment-list";
+    comments.forEach((comment) => list.append(createReviewCommentListItem(comment)));
+    section.append(list);
+}
+function renderUnresolvedReviewComments() {
+    if (!isPullRequestDetailPage()) {
+        document.getElementById(REVIEW_COMMENTS_SECTION_ID)?.remove();
+        return;
+    }
+    const sidebar = findPullRequestSidebar();
+    if (!sidebar) {
+        return;
+    }
+    renderReviewCommentsSection(getOrCreateReviewCommentsSection(sidebar), collectUnresolvedReviewComments());
+}
 let pending = false;
-function scheduleDecorate() {
+function enhanceGitHubPage() {
+    decoratePullRequestAuthors();
+    expandVideoLinks();
+    renderUnresolvedReviewComments();
+}
+function scheduleEnhance() {
     if (pending) {
         return;
     }
     pending = true;
     requestAnimationFrame(() => {
         pending = false;
-        decoratePullRequestAuthors();
+        enhanceGitHubPage();
     });
 }
-decoratePullRequestAuthors();
-new MutationObserver(scheduleDecorate).observe(document.body, {
+enhanceGitHubPage();
+new MutationObserver(scheduleEnhance).observe(document.body, {
     childList: true,
     subtree: true
 });
